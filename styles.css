@@ -1,0 +1,11 @@
+ul li:before {content: "\00BB \0020";}
+
+blockquote {
+  font-weight: bold;
+  font-size: 30pt;
+  margin-left: 32px;
+  margin-right: 32px;
+  font-family: "Times New Roman", Verdana;
+  border-left: 4px solid #CCC;
+  padding-left: 8px;
+}

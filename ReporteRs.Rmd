@@ -1,0 +1,383 @@
+---
+title: "Microsoft Word and PowerPoint generation from R"
+author: David Gohel - david.gohel@ardata.fr
+date: 15/04/2016
+output:
+  ioslides_presentation:
+    css: styles.css
+runtime: knitr
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = TRUE)
+```
+
+```{r message=FALSE, echo=FALSE}
+library(shiny)
+library(ggplot2)
+```
+
+# ReporteRs | an R package for reporting automation
+
+## Motivations
+
+> Reporting automation from R
+
+MS formats are still ubiquitous in corporate environments
+
+Formats and complex layouts are strong requirements
+
+Document updates and graphical annotations are time consuming
+
+Deploiement must be easy 
+
+## Solution 
+
+> An R API for creating 
+
+* MS documents 
+* that look like corporate documents 
+* with complex tables
+* and editable graphics where specific annotations can be made by non R coders
+
+## Example 
+
+### Graphical and tabular objets to use (1)
+
+```{r}
+library(ReporteRs)
+library(magrittr)
+library(ggplot2)
+
+myplot <- ggplot(data = mtcars,
+                 aes(x = wt, y = qsec,
+                     color = drat)) + geom_point()
+  
+my_ft <- vanilla.table(mtcars)
+```
+
+## Example 
+
+### Graphical and tabular objets to use (2)
+
+
+```{r}
+myplot
+```
+
+## Example 
+
+### Graphical and tabular objets to use (3)
+
+
+```{r echo=FALSE, results='asis'}
+tmp <- paste0("<style>table {border-collapse:collapse;}</style>", as.html(my_ft))
+tmp <- URLencode(tmp)
+cat('<iframe src="data:text/html;charset=utf-8,', tmp ,
+    '" style="border: none; seamless:seamless; width: 800px; height: 600px"></iframe>')
+```
+
+
+## Word example
+
+
+```{r}
+docx() %>% 
+  addTitle("Tabular example") %>% 
+  addFlexTable( my_ft ) %>% 
+  addTitle("Graphic example") %>% 
+  addPlot(fun = print, x = myplot, vector.graphic = TRUE) %>% 
+  writeDoc("docs/first_.docx")
+```
+
+It produces this [document](docs/first_.docx).
+
+
+## PowerPoint example
+
+
+```{r}
+pptx() %>% 
+  addSlide("Title and Content") %>% 
+  addTitle("Tabular example") %>% 
+  addFlexTable( my_ft ) %>% 
+  addSlide("Title and Content") %>% 
+  addTitle("Graphic example") %>% 
+  addPlot(fun = print, x = myplot) %>% 
+  writeDoc("docs/first_.pptx")
+```
+
+It produces this [document](docs/first_.pptx).
+
+## Workflow
+
+```{r, echo=FALSE}
+DiagrammeR::grViz("
+digraph dot{
+
+graph [layout = circo]
+
+node [shape = square,
+      style = filled, 
+      fillcolor = '#D46A6A']
+
+a [label = 'object creation']
+b [label = 'add content']
+c [label = 'write document']
+
+edge [color = grey, arrowhead = vee]
+a -> {b}
+b -> {c}
+}
+")
+```
+
+
+## *add* functions
+
+|              |              |
+|--------------|--------------|
+| addFlexTable | addPlot      |
+| addParagraph | addTitle     |
+| addTOC       | addBreakPage |
+| addSlide     | addSection   |
+| addImage     | addMardown   |
+| ...          | ...          |
+
+
+
+
+
+
+
+# FlexTable | build complex formatted tables 
+
+## FlexTable features
+
+
+* Layout
+    * Free table header and footer
+    * Merge cells (by rows or columns)
+* Format : cells, borders, paragraphs, text
+* Annotate : add text and images 
+
+## FlexTable output
+
+```{r echo=FALSE, results='asis'}
+# correlation matrix ------------------------------------------------------
+data( mtcars )
+cormatrix = cor(mtcars)
+
+# color calculation -------------------------------------------------------
+library( RColorBrewer )
+colors = c("#FFFFFF", brewer.pal(n = 4, name = "Reds") )
+breaks = c( -Inf, seq(0.2, .8, by = .2), Inf )
+mycut = cut( abs(cormatrix), breaks = breaks, include.lowest = TRUE, label = FALSE )
+mycolors = colors[ mycut ]
+
+# FlexTable creation -------------------------------------------------------
+corr_table = FlexTable( round(cormatrix, 1), add.rownames = TRUE,
+  body.par.props = parCenter(padding=3), header.par.props = parCenter(padding=3) )
+corr_table = setFlexTableBackgroundColors( corr_table, j = seq_len(ncol(cormatrix)) + 1, colors = mycolors )
+
+
+# cosmetics ---------------------------------------------------------------
+corr_table = setFlexTableBackgroundColors( corr_table, i = 1, colors = "#EFEFEF", to = "header" )
+corr_table = setFlexTableBackgroundColors( corr_table, j = 1, colors = "#EFEFEF" )
+corr_table[,1] = textBold()
+tmp <- paste0("<style>table {border-collapse:collapse;}</style>", as.html(corr_table))
+tmp <- URLencode(tmp)
+
+cat('<iframe src="data:text/html;charset=utf-8,', tmp ,
+    '" style="border: none; seamless:seamless; width: 800px; height: 600px"></iframe>')
+```
+
+## FlexTable API
+
+* Documentated here : http://davidgohel.github.io/ReporteRs/FlexTable.html
+* Sugar functions are available in package `rtable`.
+
+## FlexTable example | data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library( boot )
+library( dplyr )
+
+data(melanoma)
+
+melanoma$Status = c( 'Melanoma', 'Alive' , 'Non-melanoma' )[melanoma$status]
+melanoma$Gender = ifelse( melanoma$sex > 0, 'Male', 'Female' )
+melanoma$Ulceration = ifelse( melanoma$ulcer > 0, 'Present', 'Absent' )
+
+# data summary ------------------------------------------------------------
+data = melanoma %>% group_by( Status, Gender, Ulceration ) %>% 
+  summarize( n = n(),
+             mean = round( mean( thickness, na.rm = T ), 3 ), 
+             sd = round( sd( thickness, na.rm = T ), 3 ) )
+data
+```
+
+## FlexTable example | layout (1)
+
+```{r}
+my_flextable = FlexTable( data ) %>%
+  spanFlexTableRows(j = 1, runs = data$Status) %>% 
+  spanFlexTableRows(j = 2, runs = data$Gender) %>% 
+  addHeaderRow( value = c("Group by", "Statistics"), 
+                colspan = c(3, 3), first = T ) %>% 
+  setFlexTableWidths(widths = c(1.5, 1.5, 1.5, .75, .75, .75))
+```
+
+## FlexTable example | layout (2)
+
+```{r echo=FALSE, results='asis'}
+tmp <- paste0("<style>table {border-collapse:collapse;}</style>", as.html(my_flextable))
+tmp <- URLencode(tmp)
+cat('<iframe src="data:text/html;charset=utf-8,', tmp ,
+    '" style="border: none; seamless:seamless; width: 800px; height: 600px"></iframe>')
+```
+
+## FlexTable example | format (1)
+
+```{r}
+my_flextable[to = "header"] = textBold(font.size=12)
+my_flextable[to = "header"] = parCenter(padding=2)
+
+my_flextable[] = textNormal(font.size=11)
+
+my_flextable[data$mean < 2, "mean" ] = 
+  textItalic(color = "gray", font.size=11)
+my_flextable[data$mean > 3, "mean" ] = 
+  textBold(color = "red", font.size=11)
+
+my_flextable[] = parCenter(padding=2)
+```
+
+## FlexTable example | format (2)
+
+```{r echo=FALSE, results='asis'}
+tmp <- paste0("<style>table {border-collapse:collapse;}</style>", as.html(my_flextable))
+tmp <- URLencode(tmp)
+cat('<iframe src="data:text/html;charset=utf-8,', tmp ,
+    '" style="border: none; seamless:seamless; width: 800px; height: 600px"></iframe>')
+```
+
+## FlexTable example | annotate (1)
+
+```{r}
+my_flextable[data$sd > 2, "sd", 
+             text.properties = textProperties(
+               vertical.align = "superscript") ] = "*"
+my_flextable <- addFooterRow(my_flextable, 
+       value = "*", colspan = 6, 
+       text.properties = textProperties(
+         vertical.align = "superscript") )
+my_flextable[1, 1, to = "footer"] = 
+  "standard deviation is > 2"
+```
+
+## FlexTable example | annotate (2)
+
+```{r echo=FALSE, results='asis'}
+tmp <- paste0("<style>table {border-collapse:collapse;}</style>", as.html(my_flextable))
+tmp <- URLencode(tmp)
+cat('<iframe src="data:text/html;charset=utf-8,', tmp ,
+    '" style="border: none; seamless:seamless; width: 800px; height: 600px"></iframe>')
+```
+
+
+
+
+
+
+
+
+
+
+
+# Editable Vector Graphics 
+
+## Features
+
+<div class="columns-2">
+
+### Vector graphics
+
+* high quality rendering
+* scaled without loss of image resolution 
+
+### Editable
+
+* Graphics can be annotated 
+* Modifications can be disabled
+
+</div>
+
+## Function `addPlot`
+
+* Use option `vector.graphics=TRUE` 
+
+```{r}
+pptx() %>% addSlide("Title and Content") %>% 
+  addPlot(fun = print, x = myplot, 
+    vector.graphic = TRUE) %>% 
+  writeDoc("docs/evg_.pptx")
+
+docx() %>% addPlot(fun = print, 
+    x = myplot, vector.graphic = TRUE) %>% 
+  writeDoc("docs/evg_.docx")
+```
+
+### Outputs 
+
+[evg_.pptx](docs/evg_.pptx) and [evg_.docx](docs/evg_.docx) .
+
+
+# Ressources and informations
+
+## Get packages
+
+```{r eval=FALSE}
+install.packages(c( "ReporteRs", "rtable") )
+```
+
+`rtable` is complementing `ReporteRs` for tabular reporting.
+
+## Support 
+
+Most common issues : 
+
+* R 32 bits and java 64 bits 
+* R 64 bits and java 32 bits 
+
+### Getting help 
+
+stackoverflow and tag `reporters`: http://stackoverflow.com/questions/tagged/reporters
+
+google-groups: https://groups.google.com/forum/#!forum/reporters-package
+
+### Issues - bugs
+
+Github: https://github.com/davidgohel/ReporteRs/issues
+
+
+## Tutorials
+
+> Creating PowerPoint presentations 
+
+http://www.sthda.com/english/wiki/create-and-format-powerpoint-documents-from-r-software
+
+> Creating Word documents 
+
+http://www.sthda.com/english/wiki/create-and-format-word-documents-using-r-software-and-reporters-package
+
+
+# Live demo
+
+## Demos
+
+* Clinical reporting
+    * for R users
+    * shiny app for non R users
+* Financial reporting
+
